@@ -7,7 +7,7 @@ readme = "README.md"
 description = "A wrapper for librime `rime_api.h`"
 repository = "https://github.com/bczhc/librime-rs"
 homepage = "https://github.com/bczhc/librime-rs"
-documentation = "https://docs.rs/libbzip3-sys/latest/rime-api"
+documentation = "https://docs.rs/rime-api/latest/rime-api"
 categories = ["api-bindings"]
 
 [dependencies]
