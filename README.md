@@ -1,3 +1,1 @@
-rime_api-sys
---
-FFI bindings to librime.
+A wrapper for librime `rime_api.h`

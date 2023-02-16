@@ -1,15 +1,14 @@
 [package]
-name = "rime_api-sys"
-version = "0.3.0"
+name = "rime-api"
+version = "0.1.0"
 edition = "2021"
 license = "MIT/Apache-2.0"
 readme = "README.md"
-description = "FFI bindings to librime"
-repository = "https://github.com/bczhc/librime-sys"
-homepage = "https://github.com/bczhc/librime-sys"
-documentation = "https://docs.rs/libbzip3-sys/latest/librime-sys"
-keywords = ["ffi"]
-categories = ["api-bindings", "external-ffi-bindings"]
+description = "A wrapper for librime `rime_api.h`"
+repository = "https://github.com/bczhc/librime-rs"
+homepage = "https://github.com/bczhc/librime-rs"
+documentation = "https://docs.rs/libbzip3-sys/latest/rime-api"
+categories = ["api-bindings"]
 
-[build-dependencies]
-bindgen = "0.64.0"
+[dependencies]
+librime-sys = {path = "./librime-sys", version = "0.4.0"}
