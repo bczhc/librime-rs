@@ -2,7 +2,12 @@
 #![allow(non_camel_case_types)]
 #![allow(non_snake_case)]
 
-include!(concat!(env!("OUT_DIR"), "/bindings.rs"));
+include!(concat!(env!("OUT_DIR"), "/rime_api.rs"));
+include!(concat!(env!("OUT_DIR"), "/modifiers.rs"));
+
+pub mod key_def {
+    include!(concat!(env!("OUT_DIR"), "/keysym.rs"));
+}
 
 #[macro_export]
 macro_rules! rime_struct {
@@ -16,8 +21,9 @@ macro_rules! rime_struct {
 
 #[cfg(test)]
 mod test {
-    use crate::RimeTraits;
     use std::mem;
+
+    use crate::RimeTraits;
 
     #[test]
     fn test() {
