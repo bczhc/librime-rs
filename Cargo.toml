@@ -1,0 +1,15 @@
+[package]
+name = "rime_api-sys"
+version = "0.1.0"
+edition = "2021"
+license = "aa"
+readme = "README.md"
+description = "FFI bindings to librime"
+repository = "https://github.com/bczhc/librime-sys"
+homepage = "https://github.com/bczhc/librime-sys"
+documentation = "https://docs.rs/libbzip3-sys/latest/librime-sys"
+keywords = ["ffi"]
+categories = ["api-bindings", "external-ffi-bindings"]
+
+[build-dependencies]
+bindgen = "0.64.0"
