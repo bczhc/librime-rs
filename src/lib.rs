@@ -5,14 +5,15 @@ use librime_sys::{
     rime_struct, RimeCommit, RimeContext, RimeCreateSession, RimeDestroySession, RimeFinalize,
     RimeFindSession, RimeFreeCommit, RimeFreeContext, RimeFreeStatus, RimeGetCommit,
     RimeGetContext, RimeGetStatus, RimeInitialize, RimeKeyCode, RimeModifier, RimeProcessKey,
-    RimeSelectSchema, RimeSessionId, RimeSetup, RimeStartMaintenance, RimeStatus, RimeTraits,
+    RimeSelectSchema, RimeSessionId, RimeSetup, RimeSimulateKeySequence, RimeStartMaintenance,
+    RimeStatus, RimeTraits,
 };
 
 macro_rules! new_c_string {
-        ($x:expr) => {
-            std::ffi::CString::new($x).expect("CString creation failed")
-        };
-    }
+    ($x:expr) => {
+        std::ffi::CString::new($x).expect("CString creation failed")
+    };
+}
 
 pub struct Traits {
     inner: RimeTraits,
@@ -20,19 +21,19 @@ pub struct Traits {
 }
 
 macro_rules! setter_fn_impl {
-        ($field_name:ident, $fn_name:ident) => {
-            impl Traits {
-                // TODO: support `Path`
-                pub fn $fn_name(&mut self, path: &str) -> &mut Self {
-                    let c_string = CString::new(path).expect("CString creation failed");
-                    let ptr = c_string.into_raw();
-                    self.inner.$field_name = ptr;
-                    self.resources.push(ptr);
-                    self
-                }
+    ($field_name:ident, $fn_name:ident) => {
+        impl Traits {
+            // TODO: support `Path`
+            pub fn $fn_name(&mut self, path: &str) -> &mut Self {
+                let c_string = CString::new(path).expect("CString creation failed");
+                let ptr = c_string.into_raw();
+                self.inner.$field_name = ptr;
+                self.resources.push(ptr);
+                self
             }
-        };
-    }
+        }
+    };
+}
 
 setter_fn_impl!(shared_data_dir, set_shared_data_dir);
 setter_fn_impl!(user_data_dir, set_user_data_dir);
@@ -221,6 +222,17 @@ impl Session {
                     is_ascii_punct: status.is_ascii_punct != 0,
                 };
                 Ok(r)
+            }
+        }
+    }
+
+    pub fn simulate_key_sequence(&self, key_sequence: &str) -> Result<(), ()> {
+        unsafe {
+            let key_sequence = CString::new(key_sequence).map_err(|_| ())?;
+            if RimeSimulateKeySequence(self.session_id, key_sequence.as_ptr()) == 1 {
+                Ok(())
+            } else {
+                Err(())
             }
         }
     }

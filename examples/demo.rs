@@ -1,6 +1,6 @@
 use std::io::stdin;
 
-use librime_sys::RimeKeyCode_XK_f;
+use librime_sys::RimeKeyCode_XK_g;
 
 use rime_api::{
     create_session, finalize, initialize, KeyEvent, setup, start_maintenance, Traits,
@@ -26,7 +26,7 @@ fn main() {
         if !session.find_session() {
             session = create_session();
         }
-        let event = KeyEvent::new(RimeKeyCode_XK_f, 0);
+        let event = KeyEvent::new(RimeKeyCode_XK_g, 0);
         let result = session.process_key(event);
         if result.is_err() {
             println!("ProcessKey: Error");
