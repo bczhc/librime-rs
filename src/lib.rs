@@ -126,14 +126,9 @@ impl Session {
         }
     }
 
-    #[allow(clippy::result_unit_err)]
-    pub fn process_key(&self, key: KeyEvent) -> Result<(), ()> {
+    pub fn process_key(&self, key: KeyEvent) -> bool {
         let status = unsafe { RimeProcessKey(self.session_id, key.key_code, key.modifiers) };
-        if status == 0 {
-            Err(())
-        } else {
-            Ok(())
-        }
+        status != 0
     }
 
     pub fn context(&self) -> Option<Context> {
@@ -240,8 +235,8 @@ impl Session {
 
 #[derive(Copy, Clone)]
 pub struct KeyEvent {
-    key_code: i32,
-    modifiers: i32,
+    pub key_code: i32,
+    pub modifiers: i32,
 }
 
 impl KeyEvent {
