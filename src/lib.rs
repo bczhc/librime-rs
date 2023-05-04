@@ -2,6 +2,7 @@ use std::ffi::{CStr, CString};
 use std::os::raw::{c_char, c_int};
 use std::path::PathBuf;
 
+use crate::errors::{Error, Result};
 use librime_sys::{
     rime_struct, RimeCommit, RimeContext, RimeCreateSession, RimeDestroySession, RimeFinalize,
     RimeFindSession, RimeFreeCommit, RimeFreeContext, RimeFreeStatus, RimeGetCommit,
@@ -22,6 +23,12 @@ macro_rules! new_c_string {
 pub struct Traits {
     inner: librime_sys::RimeTraits,
     resources: Vec<*mut c_char>,
+}
+
+#[derive(Debug, Copy, Clone)]
+pub enum KeyStatus {
+    Accept,
+    Pass,
 }
 
 macro_rules! setter_fn_impl {
@@ -106,11 +113,13 @@ pub fn start_maintenance(full_check: bool) -> bool {
     unsafe { RimeStartMaintenance(full_check as c_int) != 0 }
 }
 
-pub fn create_session() -> Session {
-    unsafe {
-        let session_id = RimeCreateSession();
-        Session { session_id }
+pub fn create_session() -> Result<Session> {
+    let session_id = unsafe { RimeCreateSession() };
+    let session = Session { session_id };
+    if !session.find_session() {
+        return Err(Error::CreateSession);
     }
+    Ok(session)
 }
 
 pub struct Session {
@@ -130,9 +139,13 @@ impl Session {
         }
     }
 
-    pub fn process_key(&self, key: KeyEvent) -> bool {
+    pub fn process_key(&self, key: KeyEvent) -> KeyStatus {
         let status = unsafe { RimeProcessKey(self.session_id, key.key_code, key.modifiers) };
-        status != 0
+        if status != 0 {
+            KeyStatus::Accept
+        } else {
+            KeyStatus::Pass
+        }
     }
 
     pub fn context(&self) -> Option<Context> {
@@ -191,10 +204,10 @@ impl Session {
     }
 
     #[allow(clippy::result_unit_err)]
-    pub fn close(&self) -> Result<(), ()> {
+    pub fn close(&self) -> Result<()> {
         unsafe {
             if RimeDestroySession(self.session_id) == 0 {
-                Err(())
+                Err(Error::CloseSession)
             } else {
                 Ok(())
             }
@@ -202,11 +215,11 @@ impl Session {
     }
 
     #[allow(clippy::result_unit_err)]
-    pub fn status(&self) -> Result<Status, ()> {
+    pub fn status(&self) -> Result<Status> {
         rime_struct!(status: RimeStatus);
         unsafe {
             if RimeGetStatus(self.session_id, &mut status) == 0 {
-                Err(())
+                Err(Error::GetStatus)
             } else {
                 let r = Status {
                     inner: status,
@@ -225,13 +238,13 @@ impl Session {
         }
     }
 
-    pub fn simulate_key_sequence(&self, key_sequence: &str) -> Result<(), ()> {
+    pub fn simulate_key_sequence(&self, key_sequence: &str) -> Result<()> {
         unsafe {
-            let key_sequence = CString::new(key_sequence).map_err(|_| ())?;
+            let key_sequence = CString::new(key_sequence)?;
             if RimeSimulateKeySequence(self.session_id, key_sequence.as_ptr()) == 1 {
                 Ok(())
             } else {
-                Err(())
+                Err(Error::SimulateKeySequence)
             }
         }
     }
@@ -357,10 +370,10 @@ pub fn default_user_data_dir() -> PathBuf {
 
 pub fn default_shared_data_dir() -> PathBuf {
     #[cfg(target_os = "linux")]
-        let dir = PathBuf::from("/usr/share/rime-data/");
+    let dir = PathBuf::from("/usr/share/rime-data/");
     #[cfg(not(target_os = "linux"))]
-        // TODO
-        let dir = PathBuf::new();
+    // TODO
+    let dir = PathBuf::new();
 
     dir
 }

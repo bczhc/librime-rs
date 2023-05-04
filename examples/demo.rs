@@ -1,10 +1,10 @@
-use std::io::{BufRead, stdin};
+use std::io::{stdin, BufRead};
 use std::time::Duration;
 
 use librime_sys::RimeKeyCode_XK_g;
 
-use rime_api::{KeyEvent, Traits};
 use rime_api::engine::{DeployResult, Engine};
+use rime_api::{KeyEvent, Traits};
 
 fn main() {
     let mut traits = Traits::new();
@@ -27,17 +27,15 @@ fn main() {
     }
 
     engine.create_session().unwrap();
-
-    // engine.select_schema("092wubi").unwrap();
+    let session = engine.session().unwrap();
+    session.select_schema("092wubi");
 
     let mut stdin = stdin().lock();
     loop {
         stdin.read_line(&mut String::new()).unwrap();
         let event = KeyEvent::new(RimeKeyCode_XK_g, 0);
-        println!("{:?}", engine.process_key(event));
-        println!("{:?}", engine.context());
-        println!("{:?}", engine.commit());
+        println!("{:?}", session.process_key(event));
+        println!("{:?}", session.context());
+        println!("{:?}", session.commit());
     }
-
-    engine.close().unwrap();
 }

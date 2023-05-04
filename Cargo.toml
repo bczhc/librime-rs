@@ -14,3 +14,4 @@ categories = ["api-bindings"]
 librime-sys = {path = "./librime-sys", version = "0.4.0"}
 cstr = "0.2.11"
 home = "0.5.5"
+thiserror = "1.0.40"

@@ -1,6 +1,8 @@
+use std::ffi;
 use std::fmt::{Display, Formatter};
+use thiserror::Error;
 
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum Error {
     ProcessKey,
     CloseSession,
@@ -8,6 +10,7 @@ pub enum Error {
     SimulateKeySequence,
     CreateSession,
     GetStatus,
+    CStringNul(#[from] ffi::NulError),
 }
 
 impl Display for Error {
@@ -16,4 +19,4 @@ impl Display for Error {
     }
 }
 
-impl std::error::Error for Error {}
+pub type Result<T> = std::result::Result<T, Error>;
