@@ -1,13 +1,17 @@
 use std::ffi::{CStr, CString};
 use std::os::raw::{c_char, c_int};
+use std::path::PathBuf;
 
 use librime_sys::{
     rime_struct, RimeCommit, RimeContext, RimeCreateSession, RimeDestroySession, RimeFinalize,
     RimeFindSession, RimeFreeCommit, RimeFreeContext, RimeFreeStatus, RimeGetCommit,
     RimeGetContext, RimeGetStatus, RimeInitialize, RimeKeyCode, RimeModifier, RimeProcessKey,
     RimeSelectSchema, RimeSessionId, RimeSetup, RimeSimulateKeySequence, RimeStartMaintenance,
-    RimeStatus, RimeTraits,
+    RimeStatus,
 };
+
+pub mod engine;
+pub mod errors;
 
 macro_rules! new_c_string {
     ($x:expr) => {
@@ -16,7 +20,7 @@ macro_rules! new_c_string {
 }
 
 pub struct Traits {
-    inner: RimeTraits,
+    inner: librime_sys::RimeTraits,
     resources: Vec<*mut c_char>,
 }
 
@@ -47,7 +51,7 @@ setter_fn_impl!(staging_dir, set_staging_dir);
 
 impl Traits {
     pub fn new() -> Self {
-        rime_struct!(rime_traits: RimeTraits);
+        rime_struct!(rime_traits: librime_sys::RimeTraits);
         Self {
             inner: rime_traits,
             resources: Vec::new(),
@@ -334,4 +338,29 @@ impl<'a> Drop for Status<'a> {
             let _ = RimeFreeStatus(&mut self.inner);
         }
     }
+}
+
+pub fn default_user_data_dir() -> PathBuf {
+    #[cfg(target_os = "linux")]
+    match home::home_dir() {
+        None => PathBuf::new(),
+        Some(mut home) => {
+            home.push(".local/share/fcitx5/rime");
+            home
+        }
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    // TODO
+    PathBuf::new()
+}
+
+pub fn default_shared_data_dir() -> PathBuf {
+    #[cfg(target_os = "linux")]
+        let dir = PathBuf::from("/usr/share/rime-data/");
+    #[cfg(not(target_os = "linux"))]
+        // TODO
+        let dir = PathBuf::new();
+
+    dir
 }

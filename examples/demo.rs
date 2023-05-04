@@ -1,10 +1,10 @@
-use std::io::stdin;
+use std::io::{BufRead, stdin};
+use std::time::Duration;
 
 use librime_sys::RimeKeyCode_XK_g;
 
-use rime_api::{
-    create_session, finalize, initialize, KeyEvent, setup, start_maintenance, Traits,
-};
+use rime_api::{KeyEvent, Traits};
+use rime_api::engine::{DeployResult, Engine};
 
 fn main() {
     let mut traits = Traits::new();
@@ -14,27 +14,30 @@ fn main() {
     traits.set_distribution_code_name("Rime");
     traits.set_distribution_version("0.0.0");
     traits.set_app_name("rime-demo");
-    setup(&mut traits);
-    initialize(&mut traits);
-    start_maintenance(false);
-    let mut session = create_session();
-    session.select_schema("tiger");
 
-    let stdin = stdin();
-    loop {
-        stdin.read_line(&mut String::new()).unwrap();
-        if !session.find_session() {
-            session = create_session();
+    let mut engine = Engine::new(traits);
+    let deploy_result = engine.wait_for_deploy_result(Duration::from_secs_f32(0.1));
+    match deploy_result {
+        DeployResult::Success => {
+            println!("Deployment done");
         }
-        let event = KeyEvent::new(RimeKeyCode_XK_g, 0);
-        let result = session.process_key(event);
-        if result.is_err() {
-            println!("ProcessKey: Error");
+        DeployResult::Failure => {
+            panic!("Deployment failed");
         }
-        println!("{:?}", session.context());
-        println!("{:?}", session.commit());
     }
 
-    let _ = session.close();
-    finalize();
+    engine.create_session().unwrap();
+
+    // engine.select_schema("092wubi").unwrap();
+
+    let mut stdin = stdin().lock();
+    loop {
+        stdin.read_line(&mut String::new()).unwrap();
+        let event = KeyEvent::new(RimeKeyCode_XK_g, 0);
+        println!("{:?}", engine.process_key(event));
+        println!("{:?}", engine.context());
+        println!("{:?}", engine.commit());
+    }
+
+    engine.close().unwrap();
 }
