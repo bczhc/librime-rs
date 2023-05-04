@@ -1,10 +1,12 @@
 use std::ffi::CStr;
 use std::os::raw::{c_char, c_void};
+use std::sync::Mutex;
 use std::time::Duration;
 use std::{hint, thread};
 
 use cstr::cstr;
 use librime_sys::{RimeSessionId, RimeSetNotificationHandler};
+use once_cell::sync::Lazy;
 
 use crate::errors::Error;
 use crate::{create_session, initialize, setup, start_maintenance, Session, Traits};
@@ -20,9 +22,15 @@ pub struct Engine {
     deploy_result: Box<Option<DeployResult>>,
 }
 
+static SETUP_INIT_FLAG: Lazy<Mutex<bool>> = Lazy::new(|| Mutex::new(false));
+
 impl Engine {
     pub fn new(mut traits: Traits) -> Engine {
-        setup(&mut traits);
+        let setup_init_flag = *SETUP_INIT_FLAG.lock().unwrap();
+        if !setup_init_flag {
+            setup(&mut traits);
+            *SETUP_INIT_FLAG.lock().unwrap() = true;
+        }
 
         extern "C" fn notification_handler(
             obj: *mut c_void,
