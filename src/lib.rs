@@ -25,7 +25,7 @@ pub struct Traits {
     resources: Vec<*mut c_char>,
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum KeyStatus {
     Accept,
     Pass,
