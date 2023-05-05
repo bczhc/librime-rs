@@ -16,6 +16,11 @@ fn main() {
     traits.set_app_name("rime-demo");
 
     let mut engine = Engine::new(traits);
+
+    engine.set_notification_callback(|t, v| {
+        println!("Notification message: {:?}", (t, v));
+    });
+
     let deploy_result = engine.wait_for_deploy_result(Duration::from_secs_f32(0.1));
     match deploy_result {
         DeployResult::Success => {
