@@ -185,6 +185,19 @@ impl Session {
                     select_keys: vec![],
                     /* TODO */
                 },
+                select_labels: {
+                    let page_size = context.menu.page_size as usize;
+                    let labels = context.select_labels;
+                    if labels.is_null() {
+                        None
+                    } else {
+                        let mut vec = Vec::with_capacity(page_size);
+                        for i in 0..page_size {
+                            vec.push(to_c_str(*labels.add(i)));
+                        }
+                        Some(vec)
+                    }
+                },
             };
             Some(ret)
         }
@@ -270,6 +283,7 @@ pub struct Context<'a> {
     inner: RimeContext,
     pub composition: Composition<'a>,
     pub menu: Menu<'a>,
+    pub select_labels: Option<Vec<&'a str>>,
 }
 
 #[derive(Debug)]
