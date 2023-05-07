@@ -122,9 +122,11 @@ impl Engine {
     }
 }
 
+type NotificationHandlerFn = dyn Fn(&str, &str) + 'static;
+
 struct RimeMessageHandlerData {
     deploy_result: Option<DeployResult>,
-    user_handler: Option<Box<dyn Fn(&str, &str) + 'static>>,
+    user_handler: Option<Box<NotificationHandlerFn>>,
 }
 
 impl Drop for Engine {

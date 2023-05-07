@@ -1,8 +1,7 @@
-use std::ffi::{CStr, CString};
+use std::ffi::CString;
 use std::os::raw::{c_char, c_int};
 use std::path::PathBuf;
 
-use crate::errors::{Error, Result};
 use librime_sys::{
     rime_struct, RimeCommit, RimeContext, RimeCreateSession, RimeDestroySession, RimeFinalize,
     RimeFindSession, RimeFreeCommit, RimeFreeContext, RimeFreeStatus, RimeGetCommit,
@@ -10,6 +9,8 @@ use librime_sys::{
     RimeSelectSchema, RimeSessionId, RimeSetup, RimeSimulateKeySequence, RimeStartMaintenance,
     RimeStatus,
 };
+
+use crate::errors::{Error, Result};
 
 pub mod engine;
 pub mod errors;
@@ -154,52 +155,7 @@ impl Session {
             if RimeGetContext(self.session_id, &mut context) == 0 {
                 return None;
             }
-            let ret = Context {
-                inner: context,
-                composition: Composition {
-                    length: context.composition.length,
-                    cursor_pos: context.composition.cursor_pos,
-                    sel_start: context.composition.sel_start,
-                    sel_end: context.composition.sel_end,
-                    preedit: to_c_str_nullable(context.composition.preedit),
-                },
-                menu: Menu {
-                    page_size: context.menu.page_size,
-                    page_no: context.menu.page_no,
-                    is_last_page: context.menu.is_last_page != 0,
-                    highlighted_candidate_index: context.menu.highlighted_candidate_index,
-                    num_candidates: context.menu.num_candidates,
-                    candidates: {
-                        let mut vec = Vec::new();
-                        let num = context.menu.num_candidates;
-                        for i in 0..(num as usize) {
-                            let c = context.menu.candidates.add(i);
-                            let c = Candidate {
-                                text: to_c_str((*c).text),
-                                comment: to_c_str_nullable((*c).comment),
-                            };
-                            vec.push(c);
-                        }
-                        vec
-                    },
-                    select_keys: vec![],
-                    /* TODO */
-                },
-                select_labels: {
-                    let page_size = context.menu.page_size as usize;
-                    let labels = context.select_labels;
-                    if labels.is_null() {
-                        None
-                    } else {
-                        let mut vec = Vec::with_capacity(page_size);
-                        for i in 0..page_size {
-                            vec.push(to_c_str(*labels.add(i)));
-                        }
-                        Some(vec)
-                    }
-                },
-            };
-            Some(ret)
+            Some(Context { inner: context })
         }
     }
 
@@ -210,10 +166,7 @@ impl Session {
                 return None;
             }
         }
-        Some(Commit {
-            inner: commit,
-            text: to_c_str(commit.text),
-        })
+        Some(Commit { inner: commit })
     }
 
     #[allow(clippy::result_unit_err)]
@@ -278,32 +231,82 @@ impl KeyEvent {
     }
 }
 
+/// Context of a Rime session
+///
+/// This type doesn't need a lifetime parameter
+/// since it stores full text (copies are done in librime)
+/// on the heap once `Session::context()` is called,
+/// and uses `RimeFreeContext` to free them in `drop()`.
+///
+/// Same for `Commit`.
 #[derive(Debug)]
-pub struct Context<'a> {
+pub struct Context {
     inner: RimeContext,
-    pub composition: Composition<'a>,
-    pub menu: Menu<'a>,
-    pub select_labels: Option<Vec<&'a str>>,
+}
+
+impl Context {
+    pub fn composition(&self) -> Composition<'_> {
+        let composition = self.inner.composition;
+        Composition {
+            length: composition.length as usize,
+            cursor_pos: composition.cursor_pos as usize,
+            sel_start: composition.sel_start as usize,
+            sel_end: composition.sel_end as usize,
+            preedit: to_c_str_nullable(composition.preedit),
+        }
+    }
+
+    pub fn menu(&self) -> Menu<'_> {
+        let menu = self.inner.menu;
+
+        Menu {
+            page_size: menu.page_size as usize,
+            page_no: menu.page_no as usize,
+            is_last_page: menu.is_last_page == librime_sys::True as i32,
+            highlighted_candidate_index: menu.highlighted_candidate_index as usize,
+            num_candidates: menu.num_candidates as usize,
+            candidates: unsafe {
+                let mut candidates = Vec::new();
+                for i in 0..menu.num_candidates as usize {
+                    let candidate = &*menu.candidates.add(i);
+                    candidates.push(Candidate {
+                        text: to_c_str(candidate.text),
+                        comment: to_c_str_nullable(candidate.comment),
+                    });
+                }
+                candidates
+            },
+            select_keys: to_c_str_nullable(menu.select_keys),
+        }
+    }
+
+    pub fn select_labels(&self) -> Option<Vec<&'_ str>> {
+        to_c_str_vec(self.inner.select_labels, self.inner.menu.page_size as usize)
+    }
+
+    pub fn raw(&self) -> RimeContext {
+        self.inner
+    }
 }
 
 #[derive(Debug)]
 pub struct Composition<'a> {
-    pub length: i32,
-    pub cursor_pos: i32,
-    pub sel_start: i32,
-    pub sel_end: i32,
+    pub length: usize,
+    pub cursor_pos: usize,
+    pub sel_start: usize,
+    pub sel_end: usize,
     pub preedit: Option<&'a str>,
 }
 
 #[derive(Debug)]
 pub struct Menu<'a> {
-    pub page_size: i32,
-    pub page_no: i32,
+    pub page_size: usize,
+    pub page_no: usize,
     pub is_last_page: bool,
-    pub highlighted_candidate_index: i32,
-    pub num_candidates: i32,
+    pub highlighted_candidate_index: usize,
+    pub num_candidates: usize,
     pub candidates: Vec<Candidate<'a>>,
-    pub select_keys: Vec<&'a str>,
+    pub select_keys: Option<&'a str>,
 }
 
 #[derive(Debug)]
@@ -313,7 +316,7 @@ pub struct Candidate<'a> {
 }
 
 fn to_c_str<'a>(ptr: *mut c_char) -> &'a str {
-    unsafe { CStr::from_ptr(ptr).to_str().expect("Invalid UTF-8") }
+    to_c_str_nullable(ptr).unwrap()
 }
 
 fn to_c_str_nullable<'a>(ptr: *mut c_char) -> Option<&'a str> {
@@ -323,24 +326,42 @@ fn to_c_str_nullable<'a>(ptr: *mut c_char) -> Option<&'a str> {
     Some(to_c_str(ptr))
 }
 
-impl<'a> Drop for Context<'a> {
+fn to_c_str_vec<'a>(ptr: *mut *mut c_char, length: usize) -> Option<Vec<&'a str>> {
+    if ptr.is_null() {
+        return None;
+    }
+    let mut vec = Vec::with_capacity(length);
+    for i in 0..length {
+        unsafe {
+            vec.push(to_c_str(*ptr.add(i)));
+        }
+    }
+    Some(vec)
+}
+
+impl Drop for Context {
     fn drop(&mut self) {
         unsafe {
-            let _ = RimeFreeContext(&mut self.inner);
+            RimeFreeContext(&mut self.inner);
         }
     }
 }
 
 #[derive(Debug)]
-pub struct Commit<'a> {
+pub struct Commit {
     inner: RimeCommit,
-    pub text: &'a str,
 }
 
-impl<'a> Drop for Commit<'a> {
+impl Commit {
+    pub fn text(&self) -> &'_ str {
+        to_c_str(self.inner.text)
+    }
+}
+
+impl Drop for Commit {
     fn drop(&mut self) {
         unsafe {
-            let _ = RimeFreeCommit(&mut self.inner);
+            RimeFreeCommit(&mut self.inner);
         }
     }
 }
