@@ -1,23 +1,34 @@
-use std::ffi::CString;
-use std::os::raw::{c_char, c_int};
+use std::ffi::{CStr, CString};
+use std::hint;
+use std::os::raw::{c_char, c_int, c_void};
 use std::path::PathBuf;
+use std::ptr::null_mut;
+use std::sync::Mutex;
+use std::thread::sleep;
+use std::time::Duration;
 
 use librime_sys::{
     rime_struct, RimeCommit, RimeContext, RimeCreateSession, RimeDestroySession, RimeFinalize,
     RimeFindSession, RimeFreeCommit, RimeFreeContext, RimeFreeStatus, RimeGetCommit,
     RimeGetContext, RimeGetStatus, RimeInitialize, RimeKeyCode, RimeModifier, RimeProcessKey,
-    RimeSelectSchema, RimeSessionId, RimeSetup, RimeSimulateKeySequence, RimeStartMaintenance,
-    RimeStatus,
+    RimeSelectSchema, RimeSessionId, RimeSetNotificationHandler, RimeSetup,
+    RimeSimulateKeySequence, RimeStartMaintenance, RimeStatus,
 };
+use once_cell::sync::Lazy;
 
 use crate::errors::{Error, Result};
 
-pub mod engine;
 pub mod errors;
 
 macro_rules! new_c_string {
     ($x:expr) => {
         std::ffi::CString::new($x).expect("CString creation failed")
+    };
+}
+
+macro_rules! mutex_lock {
+    ($e:expr) => {
+        $e.lock().unwrap()
     };
 }
 
@@ -91,6 +102,7 @@ pub fn setup(traits: &mut Traits) {
 pub fn initialize(traits: &mut Traits) {
     unsafe {
         RimeInitialize(&mut traits.inner);
+        RimeSetNotificationHandler(Some(notification_handler), null_mut());
     }
 }
 
@@ -127,12 +139,18 @@ pub struct Session {
     session_id: RimeSessionId,
 }
 
+impl Drop for Session {
+    fn drop(&mut self) {
+        assert!(self.find_session());
+        let _ = self.close();
+    }
+}
+
 impl Session {
-    pub fn find_session(&self) -> bool {
+    fn find_session(&self) -> bool {
         unsafe { RimeFindSession(self.session_id) != 0 }
     }
 
-    #[allow(clippy::result_unit_err)]
     pub fn select_schema(&self, id: &str) -> bool {
         unsafe {
             let s = new_c_string!(id);
@@ -169,7 +187,6 @@ impl Session {
         Some(Commit { inner: commit })
     }
 
-    #[allow(clippy::result_unit_err)]
     pub fn close(&self) -> Result<()> {
         unsafe {
             if RimeDestroySession(self.session_id) == 0 {
@@ -180,7 +197,6 @@ impl Session {
         }
     }
 
-    #[allow(clippy::result_unit_err)]
     pub fn status(&self) -> Result<Status> {
         rime_struct!(status: RimeStatus);
         unsafe {
@@ -380,7 +396,6 @@ pub struct Status<'a> {
 }
 
 impl<'a> Drop for Status<'a> {
-    #[allow(clippy::result_unit_err)]
     fn drop(&mut self) {
         unsafe {
             let _ = RimeFreeStatus(&mut self.inner);
@@ -411,4 +426,73 @@ pub fn default_shared_data_dir() -> PathBuf {
     let dir = PathBuf::new();
 
     dir
+}
+
+#[derive(Copy, Clone, Eq, PartialEq)]
+pub enum DeployResult {
+    Success,
+    Failure,
+}
+
+extern "C" fn notification_handler(
+    _obj: *mut c_void,
+    _session_id: RimeSessionId,
+    message_type: *const c_char,
+    message_value: *const c_char,
+) {
+    unsafe {
+        let mut deploy_result = mutex_lock!(DEPLOY_RESULT);
+
+        let message_type = CStr::from_ptr(message_type).to_str().unwrap();
+        let message_value = CStr::from_ptr(message_value).to_str().unwrap();
+        if message_type == "deploy" {
+            match message_value {
+                _ if message_value == "success" => {
+                    deploy_result.replace(DeployResult::Success);
+                }
+                _ if message_value == "failure" => {
+                    deploy_result.replace(DeployResult::Failure);
+                }
+                _ => {}
+            }
+        }
+        drop(deploy_result);
+
+        let on_message_handler = mutex_lock!(NOTIFICATION_HANDLER);
+        if let Some(f) = on_message_handler.as_ref() {
+            (**f)(message_type, message_value);
+        }
+    }
+}
+
+pub trait NotificationHandlerFn: for<'a> Fn(&'a str, &'a str) + 'static + Send {}
+impl<T> NotificationHandlerFn for T where T: for<'a> Fn(&'a str, &'a str) + 'static + Send {}
+type DynNotificationHandlerFn = dyn NotificationHandlerFn<Output = ()>;
+
+static DEPLOY_RESULT: Lazy<Mutex<Option<DeployResult>>> = Lazy::new(|| Mutex::new(None));
+static NOTIFICATION_HANDLER: Lazy<Mutex<Option<Box<DynNotificationHandlerFn>>>> =
+    Lazy::new(|| Mutex::new(None));
+
+pub fn set_notification_handler<F>(handler: F)
+where
+    F: NotificationHandlerFn,
+{
+    NOTIFICATION_HANDLER
+        .lock()
+        .unwrap()
+        .replace(Box::new(handler));
+}
+
+pub fn full_deploy_and_wait() -> DeployResult {
+    *mutex_lock!(DEPLOY_RESULT) = None;
+    start_maintenance(true);
+    loop {
+        let Some(r) = *mutex_lock!(DEPLOY_RESULT) else {
+            // TODO: use message-notify waiting mechanism
+            hint::spin_loop();
+            sleep(Duration::from_secs_f32(0.1));
+            continue
+        };
+        return r;
+    }
 }

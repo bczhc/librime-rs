@@ -1,10 +1,11 @@
 use std::io::{stdin, BufRead};
-use std::time::Duration;
 
 use librime_sys::RimeKeyCode_XK_g;
 
-use rime_api::engine::{DeployResult, Engine};
-use rime_api::{KeyEvent, Traits};
+use rime_api::{
+    create_session, full_deploy_and_wait, initialize, set_notification_handler, setup,
+    DeployResult, KeyEvent, Traits,
+};
 
 fn main() {
     let mut traits = Traits::new();
@@ -15,13 +16,14 @@ fn main() {
     traits.set_distribution_version("0.0.0");
     traits.set_app_name("rime-demo");
 
-    let mut engine = Engine::new(traits);
+    setup(&mut traits);
+    initialize(&mut traits);
 
-    engine.set_notification_callback(|t, v| {
+    set_notification_handler(|t, v| {
         println!("Notification message: {:?}", (t, v));
     });
 
-    let deploy_result = engine.wait_for_deploy_result(Duration::from_secs_f32(0.1));
+    let deploy_result = full_deploy_and_wait();
     match deploy_result {
         DeployResult::Success => {
             println!("Deployment done");
@@ -31,13 +33,16 @@ fn main() {
         }
     }
 
-    engine.create_session().unwrap();
-    let session = engine.session().unwrap();
+    let session = create_session().unwrap();
     session.select_schema("092wubi");
 
     let mut stdin = stdin().lock();
     loop {
-        stdin.read_line(&mut String::new()).unwrap();
+        let mut line = String::new();
+        stdin.read_line(&mut line).unwrap();
+        if !line.strip_suffix('\n').unwrap().is_empty() {
+            break;
+        }
         let event = KeyEvent::new(RimeKeyCode_XK_g, 0);
         println!("{:?}", session.process_key(event));
         println!("{:?}", session.context());
