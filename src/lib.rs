@@ -338,7 +338,8 @@ pub struct Candidate<'a> {
 }
 
 fn to_c_str<'a>(ptr: *mut c_char) -> &'a str {
-    to_c_str_nullable(ptr).unwrap()
+    // assume ptr is well-formed UTF-8 string
+    unsafe { CStr::from_ptr(ptr).to_str().unwrap() }
 }
 
 fn to_c_str_nullable<'a>(ptr: *mut c_char) -> Option<&'a str> {

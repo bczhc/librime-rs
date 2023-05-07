@@ -45,7 +45,12 @@ fn main() {
         }
         let event = KeyEvent::new(RimeKeyCode_XK_g, 0);
         println!("{:?}", session.process_key(event));
-        println!("{:?}", session.context());
+        let c = session.context();
+        println!("{:?}", c);
+        if let Some(c) = c {
+            println!("{:?}", c.composition());
+            println!("{:?}", c.menu());
+        }
         println!("{:?}", session.commit());
     }
 }
