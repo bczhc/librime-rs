@@ -11,6 +11,8 @@ pub enum Error {
     CreateSession,
     GetStatus,
     CStringNul(#[from] ffi::NulError),
+    StartMaintenance,
+    SelectSchema,
 }
 
 impl Display for Error {

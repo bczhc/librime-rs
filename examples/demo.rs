@@ -34,7 +34,7 @@ fn main() {
     }
 
     let session = create_session().unwrap();
-    session.select_schema("092wubi");
+    session.select_schema("092wubi").unwrap();
 
     let mut stdin = stdin().lock();
     loop {

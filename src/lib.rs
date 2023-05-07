@@ -122,8 +122,11 @@ impl Drop for Traits {
     }
 }
 
-pub fn start_maintenance(full_check: bool) -> bool {
-    unsafe { RimeStartMaintenance(full_check as c_int) != 0 }
+pub fn start_maintenance(full_check: bool) -> Result<()> {
+    if unsafe { RimeStartMaintenance(full_check as c_int) == 0 } {
+        return Err(Error::StartMaintenance);
+    }
+    Ok(())
 }
 
 pub fn create_session() -> Result<Session> {
@@ -151,11 +154,14 @@ impl Session {
         unsafe { RimeFindSession(self.session_id) != 0 }
     }
 
-    pub fn select_schema(&self, id: &str) -> bool {
+    pub fn select_schema(&self, id: &str) -> Result<()> {
         unsafe {
             let s = new_c_string!(id);
-            RimeSelectSchema(self.session_id, s.as_ptr()) != 0
+            if RimeSelectSchema(self.session_id, s.as_ptr()) == 0 {
+                return Err(Error::SelectSchema);
+            }
         }
+        Ok(())
     }
 
     pub fn process_key(&self, key: KeyEvent) -> KeyStatus {
@@ -485,7 +491,9 @@ where
 
 pub fn full_deploy_and_wait() -> DeployResult {
     *mutex_lock!(DEPLOY_RESULT) = None;
-    start_maintenance(true);
+    if start_maintenance(true).is_err() {
+        return DeployResult::Failure;
+    }
     loop {
         let Some(r) = *mutex_lock!(DEPLOY_RESULT) else {
             // TODO: use message-notify waiting mechanism
