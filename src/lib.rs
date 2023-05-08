@@ -131,7 +131,10 @@ pub fn start_maintenance(full_check: bool) -> Result<()> {
 
 pub fn create_session() -> Result<Session> {
     let session_id = unsafe { RimeCreateSession() };
-    let session = Session { session_id };
+    let session = Session {
+        session_id,
+        closed: false,
+    };
     if !session.find_session() {
         return Err(Error::CreateSession);
     }
@@ -140,12 +143,15 @@ pub fn create_session() -> Result<Session> {
 
 pub struct Session {
     session_id: RimeSessionId,
+    closed: bool,
 }
 
 impl Drop for Session {
     fn drop(&mut self) {
-        assert!(self.find_session());
-        let _ = self.close();
+        if !self.closed {
+            assert!(self.find_session());
+            let _ = self.close();
+        }
     }
 }
 
@@ -193,11 +199,12 @@ impl Session {
         Some(Commit { inner: commit })
     }
 
-    pub fn close(&self) -> Result<()> {
+    pub fn close(&mut self) -> Result<()> {
         unsafe {
             if RimeDestroySession(self.session_id) == 0 {
                 Err(Error::CloseSession)
             } else {
+                self.closed = true;
                 Ok(())
             }
         }
