@@ -216,19 +216,7 @@ impl Session {
             if RimeGetStatus(self.session_id, &mut status) == 0 {
                 Err(Error::GetStatus)
             } else {
-                let r = Status {
-                    inner: status,
-                    schema_id: to_c_str(status.schema_id),
-                    schema_name: to_c_str(status.schema_name),
-                    is_disabled: status.is_disabled != 0,
-                    is_composing: status.is_composing != 0,
-                    is_ascii_mode: status.is_ascii_mode != 0,
-                    is_full_shape: status.is_full_shape != 0,
-                    is_simplified: status.is_simplified != 0,
-                    is_traditional: status.is_traditional != 0,
-                    is_ascii_punct: status.is_ascii_punct != 0,
-                };
-                Ok(r)
+                Ok(Status::from_rime(status))
             }
         }
     }
@@ -267,7 +255,7 @@ impl KeyEvent {
 /// on the heap once `Session::context()` is called,
 /// and uses `RimeFreeContext` to free them in `drop()`.
 ///
-/// Same for `Commit`.
+/// Same for `Commit`, `Status`.
 #[derive(Debug)]
 pub struct Context {
     inner: RimeContext,
@@ -396,10 +384,8 @@ impl Drop for Commit {
     }
 }
 
-pub struct Status<'a> {
+pub struct Status {
     inner: RimeStatus,
-    pub schema_id: &'a str,
-    pub schema_name: &'a str,
     pub is_disabled: bool,
     pub is_composing: bool,
     pub is_ascii_mode: bool,
@@ -409,7 +395,30 @@ pub struct Status<'a> {
     pub is_ascii_punct: bool,
 }
 
-impl<'a> Drop for Status<'a> {
+impl Status {
+    pub fn from_rime(raw: RimeStatus) -> Self {
+        Status {
+            inner: raw,
+            is_disabled: raw.is_disabled != 0,
+            is_composing: raw.is_composing != 0,
+            is_ascii_mode: raw.is_ascii_mode != 0,
+            is_full_shape: raw.is_full_shape != 0,
+            is_simplified: raw.is_simplified != 0,
+            is_traditional: raw.is_traditional != 0,
+            is_ascii_punct: raw.is_ascii_punct != 0,
+        }
+    }
+
+    pub fn schema_id(&self) -> &'_ str {
+        to_c_str(self.inner.schema_id)
+    }
+
+    pub fn schema_name(&self) -> &'_ str {
+        to_c_str(self.inner.schema_name)
+    }
+}
+
+impl Drop for Status {
     fn drop(&mut self) {
         unsafe {
             let _ = RimeFreeStatus(&mut self.inner);
