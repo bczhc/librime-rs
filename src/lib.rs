@@ -298,7 +298,10 @@ impl Context {
     }
 
     pub fn select_labels(&self) -> Option<Vec<&'_ str>> {
-        to_c_str_vec(self.inner.select_labels, self.inner.menu.page_size as usize)
+        to_c_str_vec(
+            self.inner.select_labels,
+            self.inner.menu.num_candidates as usize,
+        )
     }
 
     pub fn raw(&self) -> RimeContext {
