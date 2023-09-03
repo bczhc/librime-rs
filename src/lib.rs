@@ -15,6 +15,8 @@ use librime_sys::{
     RimeSimulateKeySequence, RimeStartMaintenance, RimeStatus,
 };
 use once_cell::sync::Lazy;
+#[cfg(feature = "serde")]
+use serde::Serialize;
 
 use crate::errors::{Error, Result};
 
@@ -234,6 +236,7 @@ impl Session {
 }
 
 #[derive(Copy, Clone)]
+#[cfg_attr(feature = "serde", derive(Serialize))]
 pub struct KeyEvent {
     pub key_code: i32,
     pub modifiers: i32,
@@ -310,6 +313,7 @@ impl Context {
 }
 
 #[derive(Debug)]
+#[cfg_attr(feature = "serde", derive(Serialize))]
 pub struct Composition<'a> {
     pub length: usize,
     pub cursor_pos: usize,
@@ -319,6 +323,7 @@ pub struct Composition<'a> {
 }
 
 #[derive(Debug)]
+#[cfg_attr(feature = "serde", derive(Serialize))]
 pub struct Menu<'a> {
     pub page_size: usize,
     pub page_no: usize,
@@ -330,6 +335,7 @@ pub struct Menu<'a> {
 }
 
 #[derive(Debug)]
+#[cfg_attr(feature = "serde", derive(Serialize))]
 pub struct Candidate<'a> {
     pub text: &'a str,
     pub comment: Option<&'a str>,
@@ -387,7 +393,9 @@ impl Drop for Commit {
     }
 }
 
+#[cfg_attr(feature = "serde", derive(Serialize))]
 pub struct Status {
+    #[serde(skip)]
     inner: RimeStatus,
     pub is_disabled: bool,
     pub is_composing: bool,
