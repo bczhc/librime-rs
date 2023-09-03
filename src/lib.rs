@@ -395,7 +395,7 @@ impl Drop for Commit {
 
 #[cfg_attr(feature = "serde", derive(Serialize))]
 pub struct Status {
-    #[serde(skip)]
+    #[cfg_attr(feature = "serde", serde(skip))]
     inner: RimeStatus,
     pub is_disabled: bool,
     pub is_composing: bool,
