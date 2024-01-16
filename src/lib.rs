@@ -462,7 +462,7 @@ pub fn default_shared_data_dir() -> PathBuf {
     dir
 }
 
-#[derive(Copy, Clone, Eq, PartialEq)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub enum DeployResult {
     Success,
     Failure,
