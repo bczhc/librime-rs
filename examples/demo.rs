@@ -14,6 +14,10 @@ fn main() {
     traits.set_distribution_version("0.0.0");
     traits.set_app_name("rime-demo");
 
+    println!("---------- Traits: ----------");
+    println!("{:?}", traits);
+    println!("-----------------------------");
+
     setup(&mut traits);
     initialize(&mut traits);
 

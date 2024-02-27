@@ -1,4 +1,5 @@
 use std::ffi::{CStr, CString};
+use std::fmt::{Debug, Formatter};
 use std::hint;
 use std::os::raw::{c_char, c_int, c_void};
 use std::path::PathBuf;
@@ -36,7 +37,20 @@ macro_rules! mutex_lock {
 
 pub struct Traits {
     inner: librime_sys::RimeTraits,
-    resources: Vec<*mut c_char>,
+    resources: Vec<(&'static str /* tag */, *mut c_char /* value */)>,
+}
+
+impl Debug for Traits {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        for (i, x) in self.resources.iter().enumerate() {
+            let value = unsafe { CStr::from_ptr(x.1).to_string_lossy() };
+            write!(f, "{}: {}", x.0, value)?;
+            if i != self.resources.len() - 1 {
+                writeln!(f)?;
+            }
+        }
+        Ok(())
+    }
 }
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
@@ -53,7 +67,7 @@ macro_rules! setter_fn_impl {
                 let c_string = CString::new(path).expect("CString creation failed");
                 let ptr = c_string.into_raw();
                 self.inner.$field_name = ptr;
-                self.resources.push(ptr);
+                self.resources.push((stringify!($field_name), ptr));
                 self
             }
         }
@@ -118,7 +132,7 @@ impl Drop for Traits {
     fn drop(&mut self) {
         for x in &self.resources {
             unsafe {
-                drop(CString::from_raw(*x));
+                drop(CString::from_raw(x.1));
             }
         }
     }
