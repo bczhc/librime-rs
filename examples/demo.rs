@@ -1,10 +1,8 @@
 use std::io::{stdin, BufRead};
 
-use librime_sys::RimeKeyCode_XK_g;
-
 use rime_api::{
     create_session, full_deploy_and_wait, initialize, set_notification_handler, setup,
-    DeployResult, KeyEvent, Traits,
+    DeployResult, Traits,
 };
 
 fn main() {
@@ -33,18 +31,23 @@ fn main() {
         }
     }
 
-    let session = create_session().unwrap();
+    let mut session = create_session().unwrap();
     session.select_schema("092wubi").unwrap();
 
     let mut stdin = stdin().lock();
     loop {
         let mut line = String::new();
         stdin.read_line(&mut line).unwrap();
-        if !line.strip_suffix('\n').unwrap().is_empty() {
+        let line = line.strip_suffix('\n').unwrap();
+
+        if line == "exit" {
+            session.close().unwrap();
             break;
         }
-        let event = KeyEvent::new(RimeKeyCode_XK_g, 0);
-        println!("{:?}", session.process_key(event));
+
+        // let event = KeyEvent::new(RimeKeyCode_XK_g, 0);
+        // println!("{:?}", session.process_key(event));
+        session.simulate_key_sequence(line).unwrap();
         let c = session.context();
         println!("{:?}", c);
         if let Some(c) = c {
