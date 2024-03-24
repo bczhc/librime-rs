@@ -1,19 +1,16 @@
 use std::ffi::{CStr, CString};
 use std::fmt::{Debug, Formatter};
-use std::hint;
 use std::os::raw::{c_char, c_int, c_void};
 use std::path::PathBuf;
 use std::ptr::null_mut;
 use std::sync::Mutex;
-use std::thread::sleep;
-use std::time::Duration;
 
 use librime_sys::{
     rime_struct, RimeCommit, RimeContext, RimeCreateSession, RimeDestroySession, RimeFinalize,
     RimeFindSession, RimeFreeCommit, RimeFreeContext, RimeFreeStatus, RimeGetCommit,
-    RimeGetContext, RimeGetStatus, RimeInitialize, RimeKeyCode, RimeModifier, RimeProcessKey,
-    RimeSelectSchema, RimeSessionId, RimeSetNotificationHandler, RimeSetup,
-    RimeSimulateKeySequence, RimeStartMaintenance, RimeStatus,
+    RimeGetContext, RimeGetStatus, RimeInitialize, RimeJoinMaintenanceThread, RimeKeyCode,
+    RimeModifier, RimeProcessKey, RimeSelectSchema, RimeSessionId, RimeSetNotificationHandler,
+    RimeSetup, RimeSimulateKeySequence, RimeStartMaintenance, RimeStatus,
 };
 use once_cell::sync::Lazy;
 #[cfg(feature = "serde")]
@@ -535,13 +532,12 @@ pub fn full_deploy_and_wait() -> DeployResult {
     if start_maintenance(true).is_err() {
         return DeployResult::Failure;
     }
-    loop {
-        let Some(r) = *mutex_lock!(DEPLOY_RESULT) else {
-            // TODO: use message-notify waiting mechanism
-            hint::spin_loop();
-            sleep(Duration::from_secs_f32(0.1));
-            continue;
-        };
-        return r;
+
+    unsafe {
+        RimeJoinMaintenanceThread();
     }
+    if let Some(DeployResult::Success) = *mutex_lock!(DEPLOY_RESULT) {
+        return DeployResult::Success;
+    }
+    DeployResult::Failure
 }
