@@ -12,7 +12,6 @@ fn main() {
     traits.set_distribution_name("Rime");
     traits.set_distribution_code_name("Rime");
     traits.set_distribution_version("0.0.0");
-    traits.set_app_name("rime-demo");
 
     println!("---------- Traits: ----------");
     println!("{:?}", traits);
