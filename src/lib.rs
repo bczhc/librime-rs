@@ -158,21 +158,20 @@ pub fn create_session() -> Result<Session> {
 }
 
 pub struct Session {
-    session_id: RimeSessionId,
-    closed: bool,
+    pub session_id: RimeSessionId,
+    pub closed: bool,
 }
 
 impl Drop for Session {
     fn drop(&mut self) {
         if !self.closed {
-            assert!(self.find_session());
             let _ = self.close();
         }
     }
 }
 
 impl Session {
-    fn find_session(&self) -> bool {
+    pub fn find_session(&self) -> bool {
         unsafe { RimeFindSession(self.session_id) != 0 }
     }
 
@@ -541,7 +540,7 @@ pub fn full_deploy_and_wait() -> DeployResult {
             // TODO: use message-notify waiting mechanism
             hint::spin_loop();
             sleep(Duration::from_secs_f32(0.1));
-            continue
+            continue;
         };
         return r;
     }
