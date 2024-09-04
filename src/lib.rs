@@ -1,16 +1,14 @@
 use std::ffi::{CStr, CString};
 use std::fmt::{Debug, Formatter};
+use std::ops::Deref;
 use std::os::raw::{c_char, c_int, c_void};
 use std::path::PathBuf;
 use std::ptr::null_mut;
 use std::sync::Mutex;
 
 use librime_sys::{
-    rime_struct, RimeCommit, RimeContext, RimeCreateSession, RimeDestroySession, RimeFinalize,
-    RimeFindSession, RimeFreeCommit, RimeFreeContext, RimeFreeStatus, RimeGetCommit,
-    RimeGetContext, RimeGetStatus, RimeInitialize, RimeJoinMaintenanceThread, RimeKeyCode,
-    RimeModifier, RimeProcessKey, RimeSelectSchema, RimeSessionId, RimeSetNotificationHandler,
-    RimeSetup, RimeSimulateKeySequence, RimeStartMaintenance, RimeStatus,
+    rime_get_api, rime_struct, RimeApi, RimeCommit, RimeContext, RimeKeyCode, RimeModifier,
+    RimeSessionId, RimeStatus,
 };
 use once_cell::sync::Lazy;
 #[cfg(feature = "serde")]
@@ -19,6 +17,36 @@ use serde::Serialize;
 use crate::errors::{Error, Result};
 
 pub mod errors;
+
+struct RimeApiWrapper(*mut RimeApi);
+
+impl Deref for RimeApiWrapper {
+    type Target = *mut RimeApi;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl From<*mut RimeApi> for RimeApiWrapper {
+    fn from(value: *mut RimeApi) -> Self {
+        Self(value)
+    }
+}
+
+unsafe impl Send for RimeApiWrapper {}
+unsafe impl Sync for RimeApiWrapper {}
+
+static RIME_API: Lazy<RimeApiWrapper> = Lazy::new(|| unsafe { rime_get_api().into() });
+
+macro_rules! rime_api_call {
+    ($f:tt, $($arg:tt)*) => {
+        (***RIME_API).$f.unwrap()($($arg)*)
+    };
+    ($f:tt) => {
+        (***RIME_API).$f.unwrap()()
+    };
+}
 
 macro_rules! new_c_string {
     ($x:expr) => {
@@ -108,20 +136,24 @@ impl Default for Traits {
 
 pub fn setup(traits: &mut Traits) {
     unsafe {
-        RimeSetup(&mut traits.inner);
+        rime_api_call!(setup, &mut traits.inner);
     }
 }
 
 pub fn initialize(traits: &mut Traits) {
     unsafe {
-        RimeInitialize(&mut traits.inner);
-        RimeSetNotificationHandler(Some(notification_handler), null_mut());
+        rime_api_call!(initialize, &mut traits.inner);
+        rime_api_call!(
+            set_notification_handler,
+            Some(notification_handler),
+            null_mut()
+        );
     }
 }
 
 pub fn finalize() {
     unsafe {
-        RimeFinalize();
+        rime_api_call!(finalize);
     }
 }
 
@@ -136,14 +168,14 @@ impl Drop for Traits {
 }
 
 pub fn start_maintenance(full_check: bool) -> Result<()> {
-    if unsafe { RimeStartMaintenance(full_check as c_int) == 0 } {
+    if unsafe { rime_api_call!(start_maintenance, full_check as c_int) == 0 } {
         return Err(Error::StartMaintenance);
     }
     Ok(())
 }
 
 pub fn create_session() -> Result<Session> {
-    let session_id = unsafe { RimeCreateSession() };
+    let session_id = unsafe { rime_api_call!(create_session) };
     let session = Session {
         session_id,
         closed: false,
@@ -169,13 +201,13 @@ impl Drop for Session {
 
 impl Session {
     pub fn find_session(&self) -> bool {
-        unsafe { RimeFindSession(self.session_id) != 0 }
+        unsafe { rime_api_call!(find_session, self.session_id) != 0 }
     }
 
     pub fn select_schema(&self, id: &str) -> Result<()> {
         unsafe {
             let s = new_c_string!(id);
-            if RimeSelectSchema(self.session_id, s.as_ptr()) == 0 {
+            if rime_api_call!(select_schema, self.session_id, s.as_ptr()) == 0 {
                 return Err(Error::SelectSchema);
             }
         }
@@ -183,7 +215,8 @@ impl Session {
     }
 
     pub fn process_key(&self, key: KeyEvent) -> KeyStatus {
-        let status = unsafe { RimeProcessKey(self.session_id, key.key_code, key.modifiers) };
+        let status =
+            unsafe { rime_api_call!(process_key, self.session_id, key.key_code, key.modifiers) };
         if status != 0 {
             KeyStatus::Accept
         } else {
@@ -194,7 +227,7 @@ impl Session {
     pub fn context(&self) -> Option<Context> {
         unsafe {
             rime_struct!(context: RimeContext);
-            if RimeGetContext(self.session_id, &mut context) == 0 {
+            if rime_api_call!(get_context, self.session_id, &mut context) == 0 {
                 return None;
             }
             Some(Context { inner: context })
@@ -204,7 +237,7 @@ impl Session {
     pub fn commit(&self) -> Option<Commit> {
         rime_struct!(commit: RimeCommit);
         unsafe {
-            if RimeGetCommit(self.session_id, &mut commit) == 0 {
+            if rime_api_call!(get_commit, self.session_id, &mut commit) == 0 {
                 return None;
             }
         }
@@ -213,7 +246,7 @@ impl Session {
 
     pub fn close(&mut self) -> Result<()> {
         unsafe {
-            if RimeDestroySession(self.session_id) == 0 {
+            if rime_api_call!(destroy_session, self.session_id) == 0 {
                 Err(Error::CloseSession)
             } else {
                 self.closed = true;
@@ -225,7 +258,7 @@ impl Session {
     pub fn status(&self) -> Result<Status> {
         rime_struct!(status: RimeStatus);
         unsafe {
-            if RimeGetStatus(self.session_id, &mut status) == 0 {
+            if rime_api_call!(get_status, self.session_id, &mut status) == 0 {
                 Err(Error::GetStatus)
             } else {
                 Ok(Status::from_rime(status))
@@ -236,7 +269,12 @@ impl Session {
     pub fn simulate_key_sequence(&self, key_sequence: &str) -> Result<()> {
         unsafe {
             let key_sequence = CString::new(key_sequence)?;
-            if RimeSimulateKeySequence(self.session_id, key_sequence.as_ptr()) == 1 {
+            if rime_api_call!(
+                simulate_key_sequence,
+                self.session_id,
+                key_sequence.as_ptr()
+            ) == 1
+            {
                 Ok(())
             } else {
                 Err(Error::SimulateKeySequence)
@@ -379,7 +417,7 @@ fn to_c_str_vec<'a>(ptr: *mut *mut c_char, length: usize) -> Option<Vec<&'a str>
 impl Drop for Context {
     fn drop(&mut self) {
         unsafe {
-            RimeFreeContext(&mut self.inner);
+            rime_api_call!(free_context, &mut self.inner);
         }
     }
 }
@@ -398,7 +436,7 @@ impl Commit {
 impl Drop for Commit {
     fn drop(&mut self) {
         unsafe {
-            RimeFreeCommit(&mut self.inner);
+            rime_api_call!(free_commit, &mut self.inner);
         }
     }
 }
@@ -442,7 +480,7 @@ impl Status {
 impl Drop for Status {
     fn drop(&mut self) {
         unsafe {
-            let _ = RimeFreeStatus(&mut self.inner);
+            let _ = rime_api_call!(free_status, &mut self.inner);
         }
     }
 }
@@ -534,7 +572,7 @@ pub fn full_deploy_and_wait() -> DeployResult {
     }
 
     unsafe {
-        RimeJoinMaintenanceThread();
+        rime_api_call!(join_maintenance_thread);
     }
     if let Some(DeployResult::Success) = *mutex_lock!(DEPLOY_RESULT) {
         return DeployResult::Success;
